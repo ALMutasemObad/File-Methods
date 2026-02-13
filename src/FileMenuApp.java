@@ -6,6 +6,7 @@ import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.InvalidPathException;
+import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -58,11 +59,20 @@ public class FileMenuApp {
                     showPermissions(scanner);
                     break;
                 case "9":
+                    readTextFile(scanner);
+                    break;
+                case "10":
+                    writeTextFile(scanner);
+                    break;
+                case "11":
+                    appendTextFile(scanner);
+                    break;
+                case "12":
                     running = false;
                     System.out.println("Goodbye!");
                     break;
                 default:
-                    System.out.println("Invalid option. Please enter a number between 1 and 9.");
+                    System.out.println("Invalid option. Please enter a number between 1 and 12.");
             }
         }
         scanner.close();
@@ -78,7 +88,10 @@ public class FileMenuApp {
         System.out.println("6. Show last modified timestamp");
         System.out.println("7. Show file size");
         System.out.println("8. Show permissions");
-        System.out.println("9. Exit");
+        System.out.println("9. View a text file (.txt)");
+        System.out.println("10. Create or overwrite a text file (.txt)");
+        System.out.println("11. Append to a text file (.txt)");
+        System.out.println("12. Exit");
     }
 
     private static void createFile(Scanner scanner) {
@@ -298,6 +311,124 @@ public class FileMenuApp {
         } catch (IOException e) {
             System.out.printf("Failed to retrieve POSIX permissions: %s%n", e.getMessage());
         }
+    }
+
+    private static void readTextFile(Scanner scanner) {
+        Path path = promptForSimplePath(scanner, "Enter the text file to view: ");
+        if (path == null) {
+            return;
+        }
+        if (Files.notExists(path)) {
+            System.out.printf("No file found at %s%n", path);
+            return;
+        }
+        if (Files.isDirectory(path)) {
+            System.out.println("The specified path is a directory.");
+            return;
+        }
+        if (!isTxtFile(path)) {
+            System.out.println("This option only works with files that end in .txt.");
+            return;
+        }
+        try {
+            String content = Files.readString(path);
+            System.out.println("--- File Contents ---");
+            if (content.isEmpty()) {
+                System.out.println("(File is empty)");
+            } else {
+                System.out.print(content);
+                if (!content.endsWith(System.lineSeparator())) {
+                    System.out.println();
+                }
+            }
+            System.out.println("---------------------");
+        } catch (IOException e) {
+            System.out.printf("Failed to read file: %s%n", e.getMessage());
+        }
+    }
+
+    private static void writeTextFile(Scanner scanner) {
+        Path path = promptForPath(scanner, "Enter the text file to create or overwrite: ", true);
+        if (path == null) {
+            return;
+        }
+        if (!isTxtFile(path)) {
+            System.out.println("This option only works with files that end in .txt.");
+            return;
+        }
+        if (Files.exists(path) && Files.isDirectory(path)) {
+            System.out.println("The specified path is a directory.");
+            return;
+        }
+        if (Files.exists(path) && !confirm(scanner, "File exists. Overwrite it? (y/N): ")) {
+            System.out.println("Write operation cancelled.");
+            return;
+        }
+        String content = collectMultilineInput(scanner,
+                "Enter the file contents. Type EOF on a new line to finish:");
+        try {
+            Files.writeString(path, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            System.out.printf("Saved %d characters to %s%n", content.length(), path.toAbsolutePath());
+        } catch (IOException e) {
+            System.out.printf("Failed to write file: %s%n", e.getMessage());
+        }
+    }
+
+    private static void appendTextFile(Scanner scanner) {
+        Path path = promptForSimplePath(scanner, "Enter the text file to append to: ");
+        if (path == null) {
+            return;
+        }
+        if (Files.notExists(path)) {
+            System.out.printf("No file found at %s%n", path);
+            return;
+        }
+        if (Files.isDirectory(path)) {
+            System.out.println("The specified path is a directory.");
+            return;
+        }
+        if (!isTxtFile(path)) {
+            System.out.println("This option only works with files that end in .txt.");
+            return;
+        }
+        String content = collectMultilineInput(scanner,
+                "Enter the text to append. Type EOF on a new line to finish:");
+        if (content.isEmpty()) {
+            System.out.println("No text entered. Nothing to append.");
+            return;
+        }
+        try {
+            String toAppend = content;
+            if (Files.size(path) > 0 && !content.startsWith(System.lineSeparator())) {
+                toAppend = System.lineSeparator() + content;
+            }
+            Files.writeString(path, toAppend, StandardOpenOption.APPEND);
+            System.out.printf("Appended %d characters to %s%n", content.length(), path.toAbsolutePath());
+        } catch (IOException e) {
+            System.out.printf("Failed to append to file: %s%n", e.getMessage());
+        }
+    }
+
+    private static String collectMultilineInput(Scanner scanner, String prompt) {
+        System.out.println(prompt);
+        System.out.println("Finish by entering a single line containing only EOF.");
+        StringBuilder builder = new StringBuilder();
+        while (true) {
+            String line = scanner.nextLine();
+            if (line.equals("EOF")) {
+                break;
+            }
+            builder.append(line).append(System.lineSeparator());
+        }
+        return builder.toString();
+    }
+
+    private static boolean isTxtFile(Path path) {
+        Path fileName = path.getFileName();
+        if (fileName == null) {
+            return false;
+        }
+        return fileName.toString().toLowerCase(Locale.ROOT).endsWith(".txt");
     }
 
     private static Path promptForPath(Scanner scanner, String prompt, boolean allowCreateParents) {
